@@ -1,17 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"bufio"
+	"encoding/json"
+	"fmt"
+	"github.com/mailru/easyjson"
+	"github.com/mailru/easyjson/jlexer"
+	"github.com/mailru/easyjson/jwriter"
+	"io"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 	"sync"
-	json "encoding/json"
-	easyjson "github.com/mailru/easyjson"
-	jlexer "github.com/mailru/easyjson/jlexer"
-	jwriter "github.com/mailru/easyjson/jwriter"
 )
 
 type User struct {
@@ -46,7 +46,7 @@ func FastSearch(out io.Writer) {
 			break
 		}
 
-        var user = userPool.Get().(*User)
+		var user = userPool.Get().(*User)
 		err = user.UnmarshalJSON([]byte(line))
 		if err != nil {
 			panic(err)
@@ -92,14 +92,12 @@ func FastSearch(out io.Writer) {
 		var email = strings.Split(user.Email, "@")
 		users = append(
 			users,
-			"[" + strconv.Itoa(i) + "] " +
-			user.Name +
-			" <" + email[0] + " [at] " + email[1] + ">",
+			"["+strconv.Itoa(i)+"] "+user.Name+" <"+email[0]+" [at] "+email[1]+">",
 		)
 
 	}
 
-	fmt.Fprintln(out, "found users:\n" + strings.Join(users, "\n") + "\n")
+	fmt.Fprintln(out, "found users:\n"+strings.Join(users, "\n")+"\n")
 	fmt.Fprintln(out, "Total unique browsers", count)
 }
 
