@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"strconv"
+	"sync"
 	json "encoding/json"
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
@@ -17,6 +18,12 @@ type User struct {
 	Browsers []string
 	Email    string
 	Name     string
+}
+
+var userPool = sync.Pool{
+	New: func() interface{} {
+		return new(User)
+	},
 }
 
 func FastSearch(out io.Writer) {
@@ -39,11 +46,12 @@ func FastSearch(out io.Writer) {
 			break
 		}
 
-        var user = User{}
+        var user = userPool.Get().(*User)
 		err = user.UnmarshalJSON([]byte(line))
 		if err != nil {
 			panic(err)
 		}
+		userPool.Put(user)
 
 		var userAndroid = false
 		var userMSIE = false
