@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"regexp"
+	"bufio"
 	"os"
 	"strings"
+	"strconv"
 	json "encoding/json"
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
@@ -19,88 +19,80 @@ type User struct {
 	Name     string
 }
 
-// вам надо написать более быструю оптимальную этой функции
 func FastSearch(out io.Writer) {
-    var users = make([]User, 0, 100)
-
 	file, err := os.Open(filePath)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	fileContents, err := ioutil.ReadAll(file)
-	if err != nil {
-		panic(err)
-	}
+	var count = 0
+	var i = -1
 
-	r := regexp.MustCompile("@")
-	seenBrowsers := []string{}
-	uniqueBrowsers := 0
-	foundUsers := ""
+	var users = make([]string, 0, 100)
+	var checked = make(map[string]bool, 256)
 
-	lines := strings.Split(string(fileContents), "\n")
-	
-	for _, line := range lines {
+	reader := bufio.NewReader(file)
+	for {
+		line, err := reader.ReadSlice('\n')
+		if err != nil {
+			break
+		}
+
         var user = User{}
-		// fmt.Printf("%v %v\n", err, line)
-		err := user.UnmarshalJSON([]byte(line))
+		err = user.UnmarshalJSON([]byte(line))
 		if err != nil {
 			panic(err)
 		}
-		users = append(users, user)
-	}
 
-	for i, user := range users {
-
-		isAndroid := false
-		isMSIE := false
+		var userAndroid = false
+		var userMSIE = false
 
 		for _, browser := range user.Browsers {
-			if ok, err := regexp.MatchString("Android", browser); ok && err == nil {
-				isAndroid = true
-				notSeenBefore := true
-				for _, item := range seenBrowsers {
-					if item == browser {
-						notSeenBefore = false
-					}
+			isBrowserChecked, found := checked[browser]
+
+			var MSIE = false
+			var Android = false
+
+			if !found {
+				MSIE = strings.Contains(browser, "MSIE")
+				Android = strings.Contains(browser, "Android")
+				checked[browser] = MSIE || Android
+			} else {
+				if isBrowserChecked {
+					MSIE = strings.Contains(browser, "MSIE")
+					Android = strings.Contains(browser, "Android")
+				} else {
+					MSIE = false
+					Android = false
 				}
-				if notSeenBefore {
-					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
-					seenBrowsers = append(seenBrowsers, browser)
-					uniqueBrowsers++
-				}
+			}
+
+			userMSIE = userMSIE || Android
+			userAndroid = userAndroid || MSIE
+
+			if !found && (Android || MSIE) {
+				count++
 			}
 		}
 
-		for _, browser := range user.Browsers {
-			if ok, err := regexp.MatchString("MSIE", browser); ok && err == nil {
-				isMSIE = true
-				notSeenBefore := true
-				for _, item := range seenBrowsers {
-					if item == browser {
-						notSeenBefore = false
-					}
-				}
-				if notSeenBefore {
-					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
-					seenBrowsers = append(seenBrowsers, browser)
-					uniqueBrowsers++
-				}
-			}
-		}
-
-		if !(isAndroid && isMSIE) {
+		i++
+		if !(userAndroid && userMSIE) {
 			continue
 		}
 
-		// log.Println("Android and MSIE user:", user["name"], user["email"])
-		email := r.ReplaceAllString(user.Email, " [at] ")
-		foundUsers += fmt.Sprintf("[%d] %s <%s>\n", i, user.Name, email)
+		var email = strings.Split(user.Email, "@")
+		users = append(
+			users,
+			"[" + strconv.Itoa(i) + "] " +
+			user.Name +
+			" <" + email[0] + " [at] " + email[1] + ">",
+		)
+
 	}
 
-	fmt.Fprintln(out, "found users:\n"+foundUsers)
-	fmt.Fprintln(out, "Total unique browsers", len(seenBrowsers))
+	fmt.Fprintln(out, "found users:\n" + strings.Join(users, "\n") + "\n")
+	fmt.Fprintln(out, "Total unique browsers", count)
 }
 
 // suppress unused package warning
@@ -218,4 +210,3 @@ func (v *User) UnmarshalJSON(data []byte) error {
 	easyjson89aae3efDecodeFast(&r, v)
 	return r.Error()
 }
-
